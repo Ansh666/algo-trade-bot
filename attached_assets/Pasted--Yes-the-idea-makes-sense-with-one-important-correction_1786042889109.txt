@@ -1,0 +1,1076 @@
+## Yes, the idea makes sense—with one important correction
+
+A **60-day MVP** can be built that:
+
+* Analyses 20–25 liquid shares.
+* Selects up to 10 valid opportunities.
+* Uses historical candles, live volume, support, resistance, trend and volatility.
+* Buys only after all conditions pass.
+* Places a stop-loss immediately after the entry is filled.
+* Exits around a small predefined target.
+* Moves the stop-loss upward when the position becomes profitable.
+* Returns the released amount to the app’s available balance display.
+* Stops trading after reaching a daily profit or loss limit.
+
+But after 60 days, you should expect a **working paper-trading application**, not a system proven to make daily profits.
+
+---
+
+# 1. Correct the ₹200 example
+
+Suppose one share is purchased at:
+
+```text
+Entry price: ₹200
+Target price: ₹204
+```
+
+Your potential gross profit is:
+
+```text
+₹204 - ₹200 = ₹4
+```
+
+If you want a **1:2 risk-to-reward ratio**, your maximum planned risk should be ₹2:
+
+```text
+Entry:     ₹200
+Stop-loss: ₹198
+Target:    ₹204
+
+Risk:      ₹2
+Reward:    ₹4
+Ratio:     1:2
+```
+
+For a ₹205 target:
+
+```text
+Entry:     ₹200
+Stop-loss: ₹197.50
+Target:    ₹205
+
+Risk:      ₹2.50
+Reward:    ₹5
+Ratio:     1:2
+```
+
+Therefore, when you say “loss should be only ₹4,” the stop-loss would approximately be:
+
+```text
+Entry:     ₹200
+Stop-loss: ₹196
+Target:    ₹204
+
+Risk:      ₹4
+Reward:    ₹4
+Ratio:     1:1
+```
+
+So the best configuration for your objective is closer to:
+
+```text
+Entry: ₹200
+Maximum planned loss: ₹2
+Target profit: ₹4
+```
+
+The loss can still exceed ₹2 during sudden gaps, poor liquidity or fast price movement. A stop-loss controls planned risk but does not guarantee the exact execution price. Upstox’s current API, for example, supports market, limit, stop-loss-limit and stop-loss-market orders, along with market-protection parameters. ([Upstox - Online Stock and Share Trading][1])
+
+---
+
+# 2. Ten stocks require separate capital
+
+If the bot purchases one ₹200 share in each of ten companies:
+
+```text
+₹200 × 10 stocks = ₹2,000 total exposure
+```
+
+You should also calculate total open risk:
+
+```text
+Risk per position: ₹2
+Ten positions:     ₹20 planned open risk
+```
+
+But ten stocks can fall together because many stocks move with Nifty, Bank Nifty or their industry sector.
+
+A safer rule is:
+
+```text
+Analyse:                 20–25 stocks
+Qualified opportunities: 0–10
+Maximum open positions:   3–5
+Maximum stocks per sector: 1–2
+```
+
+The system must not force itself to purchase ten stocks every day. Some days only two stocks may qualify; on other days none should qualify.
+
+---
+
+# 3. Do not hold user money inside your application
+
+This is the biggest architectural decision.
+
+## Wrong design
+
+```text
+User deposits ₹10,000 into your application
+Your application holds the money
+Your application invests it
+Your application later returns the money
+```
+
+This creates serious custody, payment, brokerage and investment-management issues.
+
+## Recommended design
+
+```text
+User’s bank
+     ↓
+User’s registered broker account
+     ↓
+Your application receives limited API authorisation
+     ↓
+Orders execute directly in that user’s broker account
+```
+
+Your application should contain a **virtual wallet ledger**, not the actual money.
+
+The app wallet should only display:
+
+```text
+Broker available cash
+Amount allocated to bot
+Amount reserved in positions
+Unrealised profit/loss
+Realised but unsettled profit
+Settled balance
+Withdrawable balance
+```
+
+The broker remains the source of truth.
+
+Client funds are subject to strict segregation and handling requirements, and current SEBI rules require brokers to treat client funds separately from their own funds. ([Securities and Exchange Board of India][2])
+
+---
+
+# 4. How the virtual application wallet works
+
+Suppose the user has ₹10,000 in their broker account but permits your bot to use only ₹2,000.
+
+```text
+Broker balance:           ₹10,000
+Bot-authorised allocation: ₹2,000
+App wallet available:      ₹2,000
+```
+
+The bot purchases one share for ₹200:
+
+```text
+Available: ₹2,000
+Reserved:  ₹0
+```
+
+After the order fills:
+
+```text
+Available: ₹1,800
+Reserved:  ₹200
+```
+
+The position exits at ₹204:
+
+```text
+Original amount released: ₹200
+Gross profit:               ₹4
+```
+
+The application ledger becomes:
+
+```text
+Available principal:       ₹2,000
+Realised unsettled profit:     ₹4
+Displayed total:           ₹2,004
+```
+
+However, the app must not immediately mark the ₹4 as withdrawable. Equity and F&O trade settlement generally follows T+1, and Zerodha states that intraday profits become available for trading or withdrawal after settlement on the next trading day. ([Zerodha Support][3])
+
+Therefore, your wallet model should have these balances:
+
+```python
+available_balance
+reserved_balance
+unrealised_pnl
+realised_unsettled_pnl
+settled_balance
+withdrawable_balance
+```
+
+Never use only one `wallet_balance` field.
+
+---
+
+# 5. User permission system
+
+Before the bot starts, the user should create a trading mandate.
+
+Example:
+
+```json
+{
+  "allocated_capital": 2000,
+  "maximum_position_value": 200,
+  "maximum_open_positions": 5,
+  "maximum_trades_per_day": 10,
+  "risk_per_trade": 2,
+  "daily_maximum_loss": 20,
+  "daily_profit_cap": 40,
+  "minimum_reward_risk_ratio": 2,
+  "auto_trading_enabled": true
+}
+```
+
+The permission screen should clearly display:
+
+```text
+Maximum capital usable: ₹2,000
+Maximum one-stock position: ₹200
+Maximum planned loss per trade: ₹2
+Maximum daily planned loss: ₹20
+Target per completed trade: approximately ₹4
+Maximum simultaneous positions: 5
+Permission valid until: today’s market close
+```
+
+The user must be able to:
+
+* Pause new trades.
+* Close every position.
+* Revoke broker access.
+* Reduce capital limits.
+* Disable a particular strategy.
+* View every decision and order.
+* Disable automatic trading completely.
+
+Use broker OAuth or official token authentication. Do not ask users to give you their broker password, PIN or OTP.
+
+---
+
+# 6. Parent bot and child bots
+
+Your parent bot should control the complete trading session.
+
+```text
+                        PARENT BOT
+                   Session Orchestrator
+                            │
+       ┌────────────────────┼─────────────────────┐
+       │                    │                     │
+ Permission Bot       Market Safety Bot      Wallet Bot
+       │                    │                     │
+ Universe Bot         Risk Manager           Broker Funds
+       │                    │                     │
+ History Bot          Position Sizer          Settlement
+       │                    │
+ Live Data Bot        Trade Approval
+       │                    │
+ Indicator Bot ─────── Signal Ranking
+       │                    │
+ Strategy Bots ─────── Execution Bot
+                            │
+                    Position Manager
+                            │
+                Stop / Target / Trailing
+                            │
+                   Reconciliation Bot
+```
+
+## Parent Bot
+
+The Parent Bot should:
+
+1. Authenticate the broker account.
+2. Read the user’s latest permissions.
+3. Fetch available broker funds.
+4. Confirm market-data connectivity.
+5. Confirm that no unknown position already exists.
+6. Start the market scanner.
+7. Receive signals from strategy bots.
+8. Send signals to the Risk Bot.
+9. Permit only approved orders.
+10. Stop the complete system after the daily limit.
+11. Close intraday positions before market close.
+12. Reconcile application records against broker records.
+
+The Parent Bot should not directly calculate support or resistance. Its purpose is orchestration and safety.
+
+---
+
+# 7. Child-bot responsibilities
+
+## Universe Bot
+
+Starts with an approved list, such as liquid large-cap shares.
+
+It removes stocks with:
+
+* Poor volume.
+* Large bid-ask spreads.
+* Abnormal price behaviour.
+* Trading restrictions.
+* Insufficient historical information.
+* Excessive correlation with already selected stocks.
+
+Output:
+
+```text
+Approved daily universe: 20–25 stocks
+```
+
+## Historical Research Bot
+
+Fetches:
+
+* Previous 60–250 trading days.
+* One-minute and five-minute candles.
+* Average daily volume.
+* Average intraday range.
+* Previous support and resistance zones.
+* Opening gaps.
+* Previous-day high and low.
+* Historical breakout success rate.
+
+It should update data before the market and after market closure, not recalculate several years of history on every tick.
+
+## Live Volume Bot
+
+Calculates:
+
+```text
+Current five-minute volume
+Average five-minute volume
+Relative volume
+Price movement with volume
+VWAP position
+Volume acceleration
+```
+
+Example:
+
+```text
+Current volume: 30,000
+Normal volume at this time: 15,000
+Relative volume: 2.0
+```
+
+## Support and Resistance Bot
+
+Creates price zones instead of one exact number.
+
+Example:
+
+```text
+Support zone:    ₹197.80–₹198.20
+Resistance zone: ₹201.80–₹202.10
+```
+
+It can use:
+
+* Recent swing highs and lows.
+* Previous-day levels.
+* Repeated price rejection.
+* Volume concentration.
+* Opening range.
+* ATR-based tolerance.
+
+## Pattern Bot
+
+Initially detect only a few patterns:
+
+```text
+Volume breakout
+Pullback to VWAP
+Higher-high continuation
+Support bounce
+Resistance rejection
+```
+
+Do not add 30 candlestick patterns in the first version.
+
+## Ranking Bot
+
+Scores each candidate:
+
+```text
+Liquidity:                 15
+Relative volume:           20
+Trend agreement:           15
+Support/resistance quality:15
+Breakout confirmation:     15
+Index/sector alignment:    10
+Reward-to-risk:            10
+                           ──
+Total:                    100
+```
+
+Example rule:
+
+```text
+Below 75: Reject
+75–84: Watch only
+85+: Send to Risk Bot
+```
+
+---
+
+# 8. The Risk Bot must have final authority
+
+The Risk Bot should reject the trade when:
+
+* The maximum allocated capital is reached.
+* Daily loss limit is reached.
+* Daily profit cap is reached.
+* Too many positions are open.
+* The same stock is already open.
+* Too many stocks from the same sector are open.
+* Market data is delayed.
+* Stop-loss is too close.
+* Bid-ask spread is excessive.
+* Reward-to-risk is below 1:2.
+* Broker funds are insufficient.
+* The market is approaching intraday closing time.
+
+Example approval:
+
+```text
+Stock: ABC
+Expected entry: ₹200
+Stop-loss: ₹198
+Target: ₹204
+Quantity: 1
+Position value: ₹200
+Planned risk: ₹2
+Potential reward: ₹4
+Risk/reward: 1:2
+Decision: Approved
+```
+
+---
+
+# 9. Exact order process
+
+The bot must not place all orders blindly at once.
+
+## Step 1: Submit entry
+
+```text
+BUY 1 share near ₹200
+```
+
+## Step 2: Wait for broker confirmation
+
+The order may become:
+
+```text
+Submitted
+Open
+Partially filled
+Completely filled
+Rejected
+Cancelled
+```
+
+Receiving an order ID does not mean the share has been purchased.
+
+## Step 3: Read actual average fill price
+
+Suppose the expected entry was ₹200 but the actual fill was:
+
+```text
+Actual entry: ₹200.20
+```
+
+The bot should recalculate the stop and target from the actual entry or verify that the original technical levels still produce an acceptable ratio.
+
+## Step 4: Place protective stop immediately
+
+Example:
+
+```text
+Actual entry: ₹200.20
+Stop trigger: ₹198.20
+Target:       ₹204.20
+```
+
+## Step 5: Confirm that protection is active
+
+Only then should the database mark:
+
+```text
+POSITION_PROTECTED
+```
+
+If the stop-loss order is rejected, the Emergency Bot must close the position or repeatedly attempt an approved protective exit.
+
+Official broker APIs support order placement, modification and cancellation; Upstox also documents target and stop-loss GTT structures and trailing-stop functionality. ([Upstox - Online Stock and Share Trading][4])
+
+---
+
+# 10. Target and trailing-stop logic
+
+Example:
+
+```text
+Entry: ₹200
+Initial stop: ₹198
+Target: ₹204
+```
+
+Possible process:
+
+```text
+Price below ₹202:
+Keep initial stop at ₹198
+
+Price reaches ₹202:
+Trade reaches 1R profit
+Move stop carefully toward ₹200
+
+Price reaches ₹203:
+Trail stop to approximately ₹201
+
+Price reaches ₹204:
+Exit at target
+```
+
+A safer implementation should use a state machine:
+
+```text
+INITIAL_RISK
+     ↓
+ONE_R_REACHED
+     ↓
+BREAK_EVEN_PROTECTED
+     ↓
+TRAILING_ACTIVE
+     ↓
+TARGET_REACHED
+     ↓
+CLOSED
+```
+
+Do not move the stop-loss on every ₹0.05 movement. Normal market noise will repeatedly close positions prematurely.
+
+Use either:
+
+* Fixed step trailing.
+* Recent candle low.
+* Swing-low trailing.
+* ATR-based trailing.
+
+For the first version, use fixed-step or swing-low trailing because it is easier to test.
+
+---
+
+# 11. Handling target and stop together
+
+When both target and stop-loss orders exist, one must be cancelled after the other executes.
+
+Example:
+
+```text
+Target order executed
+       ↓
+Cancel stop-loss order
+       ↓
+Confirm cancellation
+       ↓
+Mark position CLOSED
+```
+
+Or:
+
+```text
+Stop-loss executed
+       ↓
+Cancel target order
+       ↓
+Confirm cancellation
+       ↓
+Mark position CLOSED
+```
+
+Without this, the second order could later execute and accidentally create a short position.
+
+Your reconciliation process should compare:
+
+```text
+Application position quantity
+Broker position quantity
+Open target quantity
+Open stop-loss quantity
+```
+
+Any mismatch should disable new trading immediately.
+
+---
+
+# 12. Daily trading flow
+
+## Before market
+
+```text
+08:30–09:00
+Download latest historical data
+Update approved instrument list
+Calculate major support/resistance
+Verify broker authentication
+Verify static IP and server health
+Load user permissions
+```
+
+## Market opening
+
+```text
+09:15–09:30
+Observe only
+Build opening range
+No automatic entry
+```
+
+## Trading period
+
+```text
+09:30 onwards
+Analyse 20–25 stocks
+Rank candidates
+Submit only qualifying signals
+Maximum 3–5 simultaneous positions
+```
+
+## Profit/loss control
+
+Example with ₹2,000 authorised capital:
+
+```text
+Daily profit cap: ₹40
+Daily loss limit: ₹20
+```
+
+When realised profit reaches ₹40:
+
+```text
+Cancel pending entries
+Close or safely manage existing positions
+Disable new trading
+Mark session PROFIT_LOCKED
+```
+
+When realised loss reaches ₹20:
+
+```text
+Cancel pending orders
+Close open positions
+Disable new trading
+Mark session LOSS_LOCKED
+```
+
+## End of day
+
+```text
+Stop new entries before closing time
+Close all intraday positions
+Cancel remaining orders
+Reconcile broker and application
+Generate daily report
+Update wallet ledger
+```
+
+---
+
+# 13. Recommended technologies
+
+Since you already know Django and DRF:
+
+## Backend and dashboard
+
+```text
+Python 3.12+
+Django 5.2
+Django REST Framework
+PostgreSQL
+```
+
+## Trading engine
+
+```text
+Python asyncio
+Broker SDK/API
+WebSocket client
+pandas
+NumPy
+TA-Lib or pandas-ta
+```
+
+## Tasks and communication
+
+```text
+Redis
+Celery
+Celery Beat
+Django Channels, optional
+```
+
+## Deployment
+
+```text
+Ubuntu VPS
+Docker
+Docker Compose
+Nginx
+Gunicorn for Django
+Separate async trading-engine process
+Static public IP
+```
+
+## Monitoring
+
+```text
+Sentry
+Prometheus/Grafana, optional
+Telegram alerts
+Structured JSON logs
+```
+
+Do not execute live WebSocket trading logic inside Django HTTP views or ordinary Celery tasks. Keep a dedicated, persistent trading-engine process.
+
+---
+
+# 14. Important Django models
+
+```text
+BrokerAccount
+BrokerSession
+TradingPermission
+TradingWalletLedger
+WalletTransaction
+Instrument
+HistoricalCandle
+MarketCandle
+SupportResistanceZone
+Strategy
+StrategyConfiguration
+Signal
+SignalScore
+RiskDecision
+Order
+OrderEvent
+Position
+PositionEvent
+Trade
+SettlementRecord
+DailyTradingSession
+DailyPnL
+BotHeartbeat
+SystemIncident
+AuditLog
+```
+
+The wallet ledger should use an append-only approach:
+
+```text
+ALLOCATION_CREATED
+POSITION_RESERVED
+POSITION_RELEASED
+PROFIT_RECORDED_UNSETTLED
+LOSS_RECORDED
+PROFIT_SETTLED
+WITHDRAWAL_RECORDED
+```
+
+Do not directly keep changing one balance without recording how it changed.
+
+---
+
+# 15. A realistic 60-day plan
+
+## Days 1–7: Rules and broker integration
+
+* Select one broker.
+* Register the developer application.
+* Configure sandbox or paper trading.
+* Write the exact strategy.
+* Define risk limits.
+* Define all order states.
+* Create user permission and wallet-ledger designs.
+* Document compliance assumptions.
+
+**Result:** clear technical and risk specification.
+
+## Days 8–14: Django backend
+
+* Create the Django project.
+* Configure PostgreSQL and Redis.
+* Create broker, permission, wallet, signal, order and position models.
+* Add authentication.
+* Add encrypted token storage.
+* Build strategy-configuration APIs.
+* Build emergency-control APIs.
+
+**Result:** application foundation.
+
+## Days 15–21: Historical and live market data
+
+* Download instrument master.
+* Fetch historical candles.
+* Connect market-data WebSocket.
+* Build one-minute and five-minute candles.
+* Save completed candles.
+* Detect stale prices.
+* Implement safe reconnection.
+
+**Result:** reliable market-data pipeline.
+
+## Days 22–28: Research bots
+
+* Universe selection.
+* Liquidity analysis.
+* Relative volume.
+* VWAP, EMA and ATR.
+* Swing highs/lows.
+* Support and resistance zones.
+* Opening-range calculation.
+* Market and sector filters.
+
+**Result:** daily list of 20–25 researched shares.
+
+## Days 29–35: Strategy and ranking
+
+* Implement one volume-breakout strategy.
+* Implement one support-pullback strategy.
+* Add signal scoring.
+* Add minimum confidence threshold.
+* Prevent forced trades.
+* Record every accepted and rejected signal.
+
+**Result:** deterministic trade candidates.
+
+## Days 36–42: Backtesting and costs
+
+* Build event-based backtesting.
+* Include brokerage, taxes and slippage.
+* Test different market periods.
+* Calculate maximum drawdown.
+* Calculate win rate and profit factor.
+* Test 1:2 risk-reward variations.
+* Validate the ₹200/₹198/₹204 model.
+
+Zerodha’s current intraday brokerage is listed as 0.03% or ₹20 per executed order, whichever is lower, in addition to applicable taxes and exchange charges. Therefore, all ₹4–₹5 target calculations must use **net profit after charges**, not gross profit. ([Zerodha][5])
+
+**Result:** evidence showing whether the strategy has any historical edge.
+
+## Days 43–48: Risk engine
+
+* Capital-allocation limit.
+* Per-trade risk.
+* Daily profit cap.
+* Daily loss limit.
+* Position and sector limits.
+* Stale-data rejection.
+* Spread and liquidity checks.
+* Correlation checks.
+* Global kill switch.
+
+**Result:** tested Risk Bot with veto authority.
+
+## Days 49–53: Execution and position management
+
+* Submit sandbox orders.
+* Handle partial fills.
+* Handle rejected orders.
+* Place protective stop after fill.
+* Place target.
+* Implement trailing stop.
+* Implement target/stop sibling cancellation.
+* Reconcile with broker positions.
+
+**Result:** complete protected trade lifecycle.
+
+## Days 54–57: Parent Bot and wallet
+
+* Build session orchestration.
+* Add user mandate validation.
+* Add wallet reservation and release.
+* Add realised/unsettled/settled balances.
+* Add daily reports.
+* Add Telegram alerts.
+* Add emergency stop control.
+
+**Result:** complete multi-bot workflow.
+
+## Days 58–60: Failure testing and deployment
+
+Test:
+
+* WebSocket disconnection.
+* API timeout.
+* Entry rejection.
+* Stop rejection.
+* Partial fill.
+* Duplicate order message.
+* Database restart.
+* Redis restart.
+* Parent Bot crash.
+* Broker/application quantity mismatch.
+* Unrecognised open position.
+
+Deploy using paper trading only.
+
+**Result:** a functional 60-day MVP.
+
+---
+
+# 16. What you will have after 60 days
+
+You can realistically have:
+
+* Parent and child-bot architecture.
+* Historical and live-data research.
+* Automated signal generation.
+* Risk approval.
+* Broker sandbox execution.
+* Automatic target and stop management.
+* Trailing-stop logic.
+* Virtual wallet ledger.
+* User capital permission.
+* Emergency controls.
+* Dashboard and reports.
+* Paper-trading deployment.
+
+You will **not yet have proof** that it can safely make consistent profits.
+
+After Day 60, run it in paper mode for at least another 30–60 trading days. Then start live testing with one share per position and very small permitted capital.
+
+---
+
+# 17. Personal use versus other users
+
+## Personal application
+
+For only your own broker account, this is considerably simpler:
+
+```text
+Your broker account
+Your funds
+Your API permission
+Your strategy
+Your risk limits
+```
+
+You still must follow your broker’s API and current retail-algo requirements.
+
+## Application for multiple users
+
+When other users connect their accounts and your system automatically decides and executes trades, it becomes much more regulated.
+
+SEBI’s retail-algo framework routes such activity through brokers, and NSE currently maintains an empanelment framework for algo providers. The NSE page was updated on July 31, 2026 and refers algo providers to the April 30, 2026 empanelment circular. ([Securities and Exchange Board of India][6])
+
+If your service independently chooses investments and manages other people’s funds, investment-advisory or discretionary portfolio-management questions may also arise. SEBI describes securities investment advice as falling under the Investment Adviser framework, while discretionary portfolio management is a separately registered activity with a ₹50 lakh minimum client investment requirement. You should obtain specialist securities-law advice before allowing public users or charging them. ([Securities and Exchange Board of India][7])
+
+Therefore:
+
+```text
+Phase 1: Personal account only
+Phase 2: Each user’s own broker account, no custody
+Phase 3: Broker partnership and regulatory review
+Phase 4: Public commercial product
+```
+
+Do not start by accepting money into your company’s application wallet.
+
+---
+
+# 18. Approximate cost
+
+## Personal 60-day MVP, self-developed
+
+```text
+VPS with static IP:          ₹1,000–₹2,500/month
+Broker API/data:             ₹0–₹500/month depending on broker
+Domain and SSL:              ₹1,000–₹2,000/year
+Monitoring/alerts:           ₹0–₹1,000/month
+Database/Redis:              Included on VPS initially
+Historical data:             ₹0–₹5,000/month depending on source
+```
+
+Estimated infrastructure for the first two months:
+
+```text
+Basic configuration: ₹3,000–₹8,000
+With paid data/tools: ₹8,000–₹20,000
+Trading capital: separate
+```
+
+## Multi-user commercial platform
+
+A secure multi-user beta requires:
+
+* User authentication and KYC-related integration.
+* Broker OAuth for each account.
+* Token encryption.
+* Complete audit logging.
+* Broker partnership.
+* Security review.
+* Regulatory/legal consultation.
+* High-availability trading services.
+* Monitoring and incident response.
+
+That is not merely a ₹10,000 personal project. Outsourced development and compliance can easily move into several lakhs, depending on broker arrangements and regulatory requirements.
+
+---
+
+## Final practical design
+
+Your concept should be implemented as:
+
+```text
+User authorises ₹2,000
+        ↓
+Money remains in user’s broker account
+        ↓
+Parent Bot analyses 20–25 stocks
+        ↓
+Risk Bot permits 0–5 positions
+        ↓
+Each position may use approximately ₹200
+        ↓
+Entry is confirmed
+        ↓
+Stop-loss is activated immediately
+        ↓
+Target is placed around 2R
+        ↓
+Trailing stop protects increasing profit
+        ↓
+Position closes
+        ↓
+Application releases reserved capital
+        ↓
+Profit appears as realised-unsettled
+        ↓
+After broker settlement, wallet shows settled balance
+```
+
+This makes technical and financial sense. The correct objective is not “every trade will make ₹4.” It is:
+
+> Every trade has a controlled planned loss, a larger potential profit, complete execution protection, and the system takes no trade when conditions are poor.
+
+[1]: https://upstox.com/developer/api-documentation/v3/place-order/?utm_source=chatgpt.com "Place Order V3 API | Upstox Developer API"
+[2]: https://www.sebi.gov.in/legal/circulars/jun-2023/upstreaming-of-clients-funds-by-stock-brokers-sbs-clearing-members-cms-to-clearing-corporations-ccs-_72380.html?utm_source=chatgpt.com "Upstreaming of clients' funds by Stock Brokers (SBs) / ..."
+[3]: https://support.zerodha.com/category/trading-and-markets/general-kite/funds/articles/intraday-profits-from-yesterday?utm_source=chatgpt.com "Can yesterday’s intraday profits be used for today’s trade in Zerodha?"
+[4]: https://upstox.com/developer/api-documentation/place-gtt-order/?utm_source=chatgpt.com "Place GTT Order API | Upstox Developer API"
+[5]: https://zerodha.com/charges/?utm_source=chatgpt.com "Zerodha brokerage charges, fees & taxes on trading and investing"
+[6]: https://www.sebi.gov.in/legal/circulars/feb-2025/safer-participation-of-retail-investors-in-algorithmic-trading_91614.html?utm_source=chatgpt.com "Safer participation of retail investors in Algorithmic trading"
+[7]: https://www.sebi.gov.in/sebi_data/meetingfiles/oct-2024/1728550911419_1.pdf?utm_source=chatgpt.com "Review of regulatory framework for Investment Advisers ..."

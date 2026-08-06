@@ -1,0 +1,159 @@
+## Yes, we can build such an AI trading bot
+
+The bot can:
+
+* Monitor live stock prices and volume.
+* Calculate support and resistance levels.
+* Buy shares automatically when entry conditions are met.
+* Immediately place a stop-loss and profit target.
+* Trail the stop-loss when price moves in profit.
+* Exit all intraday positions before market closing.
+* Restrict daily losses, number of trades and capital used.
+* Send notifications and maintain complete trade logs.
+
+Brokers such as Zerodha and Upstox provide APIs for live data and order execution. Zerodha’s Kite Connect supports real-time orders, portfolio management and WebSocket market data, while Upstox supports regular orders and conditional orders involving targets and stop-losses. ([Kite][1])
+
+## But it cannot guarantee investment growth
+
+A bot only applies a strategy consistently. It cannot know with certainty whether a support level will hold or whether the market will suddenly reverse.
+
+SEBI’s study found that **7 out of 10 individual intraday traders in the equity cash segment made losses**. Therefore, automation does not automatically create a profitable system. ([Securities and Exchange Board of India][2])
+
+The bot may still lose because of:
+
+* False support or resistance breakouts.
+* Sudden news or market gaps.
+* Slippage between expected and executed price.
+* Stop-loss orders executing below the trigger during fast movement.
+* Brokerage, taxes and other transaction costs.
+* A strategy that performed well historically but fails in current conditions.
+* API, internet or broker-server failures.
+
+## A sensible bot design
+
+A safe first version should be **rule-based**, not completely controlled by an AI language model.
+
+For example:
+
+```text
+Stock universe:
+Only liquid Nifty 50 stocks
+
+Trend condition:
+Price above 20 EMA and 50 EMA
+
+Entry:
+Price breaks resistance
+Volume is at least 1.5 times average volume
+Nifty trend is also positive
+
+Stop-loss:
+Below recent swing low or 0.5% below entry
+
+Target:
+At least 1:2 risk-to-reward ratio
+
+Risk per trade:
+Maximum 0.25%–0.50% of total capital
+
+Daily limit:
+Stop trading after 2 losing trades
+or after losing 1% of total capital
+
+Time restriction:
+No new trades during the first 15 minutes
+No new trades after 2:45 PM
+Exit everything before market closure
+```
+
+Position size should be calculated from risk rather than using a fixed quantity:
+
+```text
+Capital = ₹1,00,000
+Maximum risk per trade = 0.5% = ₹500
+Entry price = ₹1,000
+Stop-loss = ₹990
+Risk per share = ₹10
+
+Quantity = ₹500 ÷ ₹10 = 50 shares
+```
+
+Thus, one failed trade should lose approximately ₹500 before slippage and charges—not a large portion of the account.
+
+## Recommended system architecture
+
+```text
+Broker live-data WebSocket
+          ↓
+Candle and indicator engine
+          ↓
+Support/resistance and signal engine
+          ↓
+Risk and position-size controller
+          ↓
+Order manager
+    ↙              ↘
+Entry order     Stop-loss order
+                     ↓
+         Target/trailing-stop manager
+                     ↓
+        Database, logs and notifications
+```
+
+For your Django/Python background, it could be built using:
+
+* **Python** for strategy calculations and execution.
+* **Django or FastAPI** for APIs and dashboard.
+* **PostgreSQL** for signals, orders and trade history.
+* **Redis/Celery** for scheduled and background processing.
+* **Broker WebSocket** for live ticks.
+* **Broker order API** for entry, stop-loss and exit.
+* **Telegram/email notifications** for alerts.
+* A separate emergency process that closes positions when limits are breached.
+
+## Where AI should be used
+
+AI can assist with:
+
+* Classifying market conditions as trending, sideways or highly volatile.
+* Ranking stocks by signal quality.
+* Detecting unusual price and volume behaviour.
+* Analysing news sentiment.
+* Adjusting strategy parameters within strictly defined limits.
+
+AI should **not** independently decide unlimited position size, remove stop-losses, average losing positions or continue trading after the daily loss limit.
+
+## Proper development sequence
+
+Do not directly connect the first version to real money.
+
+1. Define one exact strategy.
+2. Backtest it on several years of historical data.
+3. Include brokerage, taxes and realistic slippage.
+4. Use walk-forward testing instead of tuning on the entire dataset.
+5. Paper-trade it live for at least several weeks.
+6. Verify rejected orders, partial fills, disconnections and duplicate-order protection.
+7. Begin with very small capital.
+8. Increase capital only after consistent live results.
+
+The important backtest figures are not merely total profit. Check maximum drawdown, win rate, average profit versus average loss, profit factor, number of trades and performance after all charges.
+
+## Compliance in India
+
+Automated retail trading through broker APIs is possible, but it must follow the broker’s current implementation and SEBI/exchange framework. SEBI issued its retail algorithmic-trading framework on February 4, 2025, and NSE subsequently issued implementation standards. Requirements can depend on order frequency, strategy type, API setup and whether the algo is private or offered to other users. ([Securities and Exchange Board of India][3])
+
+Therefore, the broker should confirm that your account and API arrangement are permitted before live deployment.
+
+## My honest recommendation
+
+Build the first product as a **semi-automatic trading assistant**:
+
+* The bot detects entry, stop-loss, target and quantity.
+* You approve the entry manually.
+* Once approved, the bot manages stop-loss, target and emergency exit automatically.
+
+After paper trading proves the strategy, it can gradually move toward full automation. The realistic goal should be **controlled risk and consistent execution**, not guaranteed daily profit or guaranteed investment growth.
+
+[1]: https://kite.trade/docs/connect/v3/?utm_source=chatgpt.com "Kite Connect 3 / API documentation"
+[2]: https://www.sebi.gov.in/media-and-notifications/press-releases/jul-2024/sebi-study-finds-that-7-out-of-10-individual-intraday-traders-in-equity-cash-segment-make-losses_84948.html?utm_source=chatgpt.com "SEBI study finds that 7 out of 10 individual intraday traders ..."
+[3]: https://www.sebi.gov.in/legal/circulars/feb-2025/safer-participation-of-retail-investors-in-algorithmic-trading_91614.html?utm_source=chatgpt.com "Safer participation of retail investors in Algorithmic trading"

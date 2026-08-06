@@ -1,0 +1,934 @@
+## First, correct the profit target
+
+Your **parent bot + child bots** architecture is absolutely buildable. However:
+
+* Investing ₹100 and exiting at ₹110 means a **10% return**, not 2–3%.
+* Earning 2% every trading day for 250 days would mathematically multiply capital by about **141×**.
+* Earning 3% daily would multiply it by about **1,619×**.
+
+That shows why 2–3% **every day** is not a realistic expectation. Some days the bot will profit, some days it will lose, and many days it should take **no trade**. SEBI’s study found that 7 out of 10 individual equity-cash intraday traders made losses. ([Securities and Exchange Board of India][1])
+
+Use this safer objective:
+
+```text
+Daily profit cap:       +1% or +2%
+Daily maximum loss:     -0.5%
+Risk per trade:         0.10%–0.25%
+Maximum trades:         2–4
+Risk-to-reward:         Minimum 1:2
+```
+
+Here, `+2%` is the point where the bot **stops trading for the day after earning it**. It is not a guarantee that the bot will earn 2% every day.
+
+---
+
+# 1. Parent-bot and child-bot architecture
+
+Do not build multiple independent AI systems that can all place orders. Build one **Parent Trading Controller**, with specialist child modules.
+
+```text
+                    PARENT BOT
+             Trading Session Controller
+                         │
+       ┌─────────────────┼───────────────────┐
+       │                 │                   │
+ Market Scanner     Risk Manager       Account Manager
+       │                 │                   │
+ Data Collector    Position Sizing      Funds/Settlement
+       │                 │
+ Strategy Bots ─── Risk Approval
+       │                 │
+       └────────── Execution Bot
+                         │
+                  Position Manager
+                         │
+               Stop-loss / Target /
+                  Trailing Stop
+                         │
+                 Reconciliation Bot
+                         │
+                 Reports and Alerts
+```
+
+## Parent bot
+
+The Parent Bot controls the entire trading day.
+
+Its responsibilities:
+
+```text
+1. Authenticate with the broker.
+2. Confirm WebSocket and database connectivity.
+3. Check available funds.
+4. Confirm that no old position is open.
+5. Start all child bots.
+6. Permit or reject new trades.
+7. Monitor daily profit and daily loss.
+8. Stop all trading when a limit is reached.
+9. Close intraday positions before market closure.
+10. Generate the final daily report.
+```
+
+Only the Parent Bot should be permitted to send an approved instruction to the Execution Bot.
+
+---
+
+# 2. Child bots
+
+## A. Universe Selection Bot
+
+Do not simply select the 20 largest companies.
+
+Select 20 stocks from an approved liquid universe such as large and actively traded NSE shares using:
+
+* Average daily turnover
+* Average volume
+* Bid-ask spread
+* Recent volatility
+* Sufficient movement for intraday trading
+* No circuit restriction
+* No unusual liquidity problems
+* No duplicate highly correlated positions
+
+Example:
+
+```text
+Approved universe: 50 liquid shares
+             ↓
+Liquidity screening
+             ↓
+Remove high-spread shares
+             ↓
+Remove abnormal or restricted shares
+             ↓
+Select top 20 candidates
+```
+
+You should manually define the initial approved universe. Do not allow an AI model to select unknown or illiquid penny stocks.
+
+---
+
+## B. Market Data Bot
+
+This bot collects:
+
+* Live price
+* Bid and ask
+* Volume
+* Open, high, low and close
+* 1-minute candles
+* 5-minute candles
+* Previous-day high and low
+* VWAP
+* Nifty movement
+* Order and trade updates
+
+Broker WebSockets should be used instead of repeatedly calling REST APIs. Kite Connect supports real-time WebSocket market data, while Upstox also provides streaming market and portfolio/order updates. ([Kite Trade][2])
+
+Store completed candles, but do not save every raw tick indefinitely during the MVP.
+
+---
+
+## C. Indicator Bot
+
+This child calculates deterministic features:
+
+```text
+Relative volume
+VWAP
+20 EMA
+50 EMA
+ATR
+Recent swing high
+Recent swing low
+Support levels
+Resistance levels
+Opening range
+Previous-day high and low
+Price momentum
+Volume-price relationship
+```
+
+Initially, calculate support and resistance using rules—not a language model.
+
+For example:
+
+```text
+Resistance:
+A price area rejected at least twice recently
+
+Support:
+A price area where price previously bounced
+
+Breakout:
+Price closes above resistance,
+volume exceeds normal volume,
+and spread remains acceptable
+```
+
+---
+
+## D. Strategy Bots
+
+Build only **one or two strategies** in 20 days.
+
+### Strategy 1: Breakout with volume
+
+```text
+Stock above VWAP
+20 EMA above 50 EMA
+Price breaks recent resistance
+Current volume > 1.5 × normal volume
+Nifty direction is not strongly opposite
+Minimum reward-to-risk = 2
+```
+
+### Strategy 2: Pullback to support
+
+```text
+Stock is in an uptrend
+Price returns near VWAP/support
+Selling volume reduces
+Bullish confirmation candle appears
+Stop-loss can be placed below the support
+Minimum reward-to-risk = 2
+```
+
+Do not add candlestick patterns, news sentiment, machine learning, support/resistance, order-book imbalance and ten indicators simultaneously. That makes it impossible to identify why the strategy succeeds or fails.
+
+---
+
+## E. Signal Ranking Bot
+
+The bot may analyse 20 stocks but should not trade all 20.
+
+Example scoring system:
+
+```text
+Liquidity quality              15 points
+Relative volume                20 points
+Trend agreement                15 points
+Support/resistance quality     15 points
+Breakout confirmation          15 points
+Nifty/sector alignment         10 points
+Acceptable spread               5 points
+Reward-to-risk                  5 points
+                              ─────────
+Maximum                       100 points
+```
+
+Trading rule:
+
+```text
+Score below 75: Reject
+Score 75–84: Watch
+Score 85 or more: Send to Risk Bot
+```
+
+The scoring weights must later be validated through backtesting.
+
+---
+
+# 3. Risk Bot—the most important child
+
+The Risk Bot must have **veto authority**. Neither the Parent Bot nor the AI strategy should be able to override it.
+
+The Risk Bot checks:
+
+```text
+Is the daily loss limit reached?
+Is the daily profit cap reached?
+Are too many positions already open?
+Is this stock already being traded?
+Is the spread too large?
+Is the market data stale?
+Is the stop-loss valid?
+Is the target realistically reachable?
+Is sufficient balance available?
+Is the position correlated with existing positions?
+Does the trade provide at least 1:2 reward-to-risk?
+```
+
+## Quantity calculation
+
+Never purchase a fixed quantity simply because the share costs ₹200.
+
+Use:
+
+```text
+Quantity =
+Maximum money allowed to lose
+÷
+Difference between entry and stop-loss
+```
+
+Example with ₹20,000 capital:
+
+```text
+Capital:                 ₹20,000
+Risk per trade:          0.25%
+Maximum planned risk:    ₹50
+
+Entry:                   ₹200
+Stop-loss:               ₹198
+Risk per share:          ₹2
+
+Quantity:                ₹50 ÷ ₹2
+Quantity:                25 shares
+
+Position value:          ₹5,000
+Target at 1:2:           ₹204
+```
+
+Possible gross outcome:
+
+```text
+Stop-loss:
+25 × ₹2 = ₹50 planned loss
+
+Target:
+25 × ₹4 = ₹100 planned profit
+```
+
+Actual results can differ because of charges and slippage.
+
+---
+
+# 4. Order Execution Bot
+
+Use a standard interface so you can change brokers later:
+
+```python
+class BrokerAdapter:
+    def place_order(self, order):
+        raise NotImplementedError
+
+    def modify_order(self, order_id, changes):
+        raise NotImplementedError
+
+    def cancel_order(self, order_id):
+        raise NotImplementedError
+
+    def get_order(self, order_id):
+        raise NotImplementedError
+
+    def get_positions(self):
+        raise NotImplementedError
+
+    def get_available_funds(self):
+        raise NotImplementedError
+```
+
+Then implement:
+
+```text
+ZerodhaBrokerAdapter
+or
+UpstoxBrokerAdapter
+```
+
+Kite Connect provides order placement, modification, cancellation, market data and portfolio APIs. Its current Connect tier lists real-time WebSocket and historical candle data at ₹500 per month. ([Kite Trade][3])
+
+Upstox provides a sandbox for placing, modifying and cancelling test orders without real funds, making it particularly useful during development. ([Upstox - Online Stock and Share Trading][4])
+
+## Correct order sequence
+
+```text
+1. Risk Bot approves trade.
+2. Execution Bot sends entry order.
+3. Broker returns order ID.
+4. Bot waits for the actual fill update.
+5. Bot reads filled quantity and average price.
+6. Bot immediately places stop-loss for filled quantity.
+7. Bot confirms that stop-loss order is active.
+8. Position Manager starts monitoring the position.
+```
+
+Never assume that receiving an `order_id` means the order was executed.
+
+The order may be:
+
+```text
+OPEN
+PARTIALLY FILLED
+COMPLETE
+REJECTED
+CANCELLED
+```
+
+Your database state should be:
+
+```text
+CANDIDATE
+    ↓
+SIGNAL_CREATED
+    ↓
+RISK_APPROVED
+    ↓
+ENTRY_SUBMITTED
+    ↓
+ENTRY_PARTIALLY_FILLED / ENTRY_FILLED
+    ↓
+STOP_LOSS_SUBMITTED
+    ↓
+PROTECTED_POSITION
+    ↓
+EXIT_SUBMITTED
+    ↓
+CLOSED
+```
+
+If the entry fills but the protective stop cannot be confirmed, the bot must invoke an emergency exit using the broker-permitted protected order type.
+
+---
+
+# 5. Stop-loss and trailing-stop process
+
+Example:
+
+```text
+Entry:            ₹200
+Initial stop:     ₹198
+Initial risk:     ₹2 per share
+Target:           ₹204
+```
+
+Here:
+
+```text
+1R = ₹2
+2R = ₹4
+```
+
+Trailing process:
+
+```text
+Price reaches ₹202:
+Trade has achieved +1R.
+Move stop near break-even only after accounting for normal movement.
+
+Price reaches ₹203:
+Trail stop below the latest confirmed swing or candle structure.
+
+Price reaches ₹204:
+Exit at the 2R target.
+```
+
+Better logic:
+
+```python
+if current_profit_r >= 1.0:
+    protect_break_even()
+
+if current_profit_r >= 1.5:
+    trail_below_recent_swing()
+
+if current_profit_r >= 2.0:
+    exit_position(reason="target_reached")
+```
+
+Do not modify the stop on every single price tick. That will create too many broker requests and cause unnecessary exits.
+
+---
+
+# 6. Daily account controller
+
+Use four separate values:
+
+```text
+available_cash
+used_margin
+realized_profit
+unsettled_profit
+withdrawable_balance
+```
+
+Example daily rules:
+
+```python
+DAILY_PROFIT_CAP_PERCENT = 1.0
+DAILY_LOSS_LIMIT_PERCENT = 0.5
+RISK_PER_TRADE_PERCENT = 0.25
+MAX_TRADES_PER_DAY = 3
+MAX_OPEN_POSITIONS = 2
+```
+
+Parent Bot logic:
+
+```python
+if daily_realized_pnl <= -daily_loss_limit:
+    close_all_positions()
+    cancel_all_orders()
+    disable_new_trades("daily_loss_limit")
+
+elif daily_realized_pnl >= daily_profit_cap:
+    close_all_positions()
+    cancel_all_orders()
+    disable_new_trades("daily_profit_cap")
+```
+
+Reaching the profit cap should stop new trades. The bot should not continue trading because it “sees one more opportunity.”
+
+---
+
+# 7. Profit cannot be immediately deposited into your bank
+
+After an intraday trade is closed:
+
+```text
+Trade closes
+    ↓
+Profit appears as realised/unsettled profit
+    ↓
+Exchange settlement completes
+    ↓
+Profit becomes withdrawable
+    ↓
+You submit a broker withdrawal request
+    ↓
+Money reaches the bank
+```
+
+For example, Zerodha states that intraday profit normally becomes available after T+1 settlement; it is not immediately available for withdrawal or reuse as fresh trading profit on the same day. ([Zerodha Support][5])
+
+Therefore, create a **Settlement Bot**, but do not assume it can directly transfer money to your bank.
+
+Its job should be:
+
+```text
+Read broker ledger
+Identify unsettled funds
+Identify withdrawable funds
+Record settlement status
+Send withdrawal reminder
+Never count unsettled profit as available capital
+```
+
+Automatic bank withdrawal should only be implemented if your chosen broker provides an official and permitted payout API. Do not automate browser clicks or store broker passwords.
+
+---
+
+# 8. Recommended technologies
+
+Because you already work with Django and Python:
+
+## Main application
+
+```text
+Python 3.12+
+Django 5.2
+Django REST Framework
+PostgreSQL
+Redis
+Celery
+Docker Compose
+```
+
+## Live trading service
+
+Use a separate asynchronous Python process:
+
+```text
+asyncio
+Broker Python SDK
+WebSocket client
+Structured logging
+```
+
+Do not process live ticks through normal Django HTTP requests.
+
+Architecture:
+
+```text
+Django/DRF:
+Dashboard, configuration, reports, database administration
+
+Async trading engine:
+WebSocket data, signals, order execution, position management
+
+Celery:
+Pre-market scan, historical-data download, backtesting,
+daily reports and cleanup
+
+Redis:
+Temporary state, locks and task coordination
+
+PostgreSQL:
+Orders, trades, candles, signals, configurations and audit logs
+```
+
+## Analysis libraries
+
+```text
+pandas
+numpy
+scipy
+scikit-learn — later
+TA-Lib or pandas-ta — optional
+pytest
+```
+
+For the first 20-day version, use rule-based calculations. Add machine learning only after collecting valid data and proving the basic strategy.
+
+---
+
+# 9. Suggested project structure
+
+```text
+trading_platform/
+│
+├── config/
+│   ├── settings.py
+│   └── risk_limits.py
+│
+├── broker/
+│   ├── base.py
+│   ├── zerodha.py
+│   └── upstox.py
+│
+├── market_data/
+│   ├── websocket.py
+│   ├── candle_builder.py
+│   └── historical.py
+│
+├── scanner/
+│   ├── universe.py
+│   ├── liquidity.py
+│   └── ranking.py
+│
+├── indicators/
+│   ├── trend.py
+│   ├── volume.py
+│   ├── support_resistance.py
+│   └── volatility.py
+│
+├── strategies/
+│   ├── base.py
+│   ├── volume_breakout.py
+│   └── support_pullback.py
+│
+├── risk/
+│   ├── engine.py
+│   ├── position_size.py
+│   └── kill_switch.py
+│
+├── execution/
+│   ├── order_manager.py
+│   ├── state_machine.py
+│   └── reconciliation.py
+│
+├── positions/
+│   ├── manager.py
+│   ├── stop_loss.py
+│   └── trailing_stop.py
+│
+├── backtesting/
+│   ├── engine.py
+│   ├── costs.py
+│   └── reports.py
+│
+├── notifications/
+│   └── telegram.py
+│
+├── trading/
+│   └── orchestrator.py
+│
+└── tests/
+```
+
+---
+
+# 10. Important database models
+
+```text
+Instrument
+Candle
+MarketSession
+Strategy
+StrategyRun
+Signal
+RiskDecision
+Order
+OrderEvent
+Trade
+Position
+DailyPnL
+RiskEvent
+BotHeartbeat
+SystemIncident
+```
+
+Every decision should be recorded:
+
+```text
+Why was the stock selected?
+Which indicators were present?
+What was the support?
+What was the resistance?
+What was the entry?
+Why was the stop selected?
+How was quantity calculated?
+What response came from the broker?
+Why did the position close?
+```
+
+This is necessary for debugging and for discovering whether the strategy actually works.
+
+---
+
+# 11. Twenty-day development plan
+
+## Days 1–2: Final rules and broker setup
+
+* Choose one broker.
+* Create developer application.
+* Set up sandbox access.
+* Finalise capital and risk limits.
+* Define the approved stock universe.
+* Write one exact strategy.
+* Define order state transitions.
+* Document every emergency condition.
+
+**Output:** strategy specification and broker connection.
+
+## Days 3–4: Django foundation
+
+* Create Django project.
+* Configure PostgreSQL and Redis.
+* Create Instrument, Signal, Order, Trade and Position models.
+* Create strategy-configuration APIs.
+* Add environment-based secret management.
+* Start Docker Compose.
+
+**Output:** backend and database running.
+
+## Days 5–6: Market data
+
+* Download instrument list.
+* Fetch historical candles.
+* Connect WebSocket.
+* Build 1-minute and 5-minute candles.
+* Detect stale data and disconnection.
+* Reconnect safely.
+
+**Output:** reliable market-data service.
+
+## Days 7–8: Indicators and stock scanner
+
+* Liquidity filtering
+* Volume calculation
+* VWAP
+* EMA
+* ATR
+* Swing high/low
+* Basic support/resistance
+* Rank top 20 candidates
+
+**Output:** scanner report with scores.
+
+## Days 9–10: Strategy and backtesting
+
+* Implement volume-breakout strategy.
+* Create historical backtester.
+* Include estimated brokerage, taxes and slippage.
+* Record every simulated trade.
+* Produce win rate, drawdown and profit factor.
+* Reject strategies with too few trades.
+
+**Output:** first backtest report.
+
+## Days 11–12: Risk engine
+
+* Position-size calculation
+* Daily loss limit
+* Profit cap
+* Maximum positions
+* Maximum trades
+* Duplicate-trade prevention
+* Stale-price rejection
+* Correlation checks
+* Kill switch
+
+**Output:** tested Risk Bot.
+
+## Days 13–14: Broker order lifecycle
+
+* Place sandbox orders.
+* Receive order updates.
+* Handle complete, partial, rejected and cancelled orders.
+* Place stop-loss after fill.
+* Implement idempotency.
+* Reconcile broker orders with database records.
+
+**Output:** complete sandbox order cycle.
+
+## Days 15–16: Position manager
+
+* Initial stop-loss
+* Profit target
+* Break-even logic
+* Trailing stop
+* Time-based exit
+* End-of-day exit
+* Emergency exit
+
+**Output:** automatic position management.
+
+## Day 17: Parent Bot
+
+Build the full session lifecycle:
+
+```text
+STARTING
+AUTHENTICATED
+DATA_READY
+SCANNING
+TRADING_ENABLED
+PROFIT_LOCKED / LOSS_LOCKED
+CLOSING
+CLOSED
+FAILED
+```
+
+**Output:** one controlled trading session.
+
+## Day 18: Dashboard and notifications
+
+Dashboard should show:
+
+* Bot status
+* Broker connection
+* Selected stocks
+* Signals
+* Open orders
+* Open positions
+* Current stop-loss
+* Realised P&L
+* Daily limits
+* Emergency stop button
+
+**Output:** usable control panel.
+
+## Day 19: Failure testing
+
+Simulate:
+
+* WebSocket disconnect
+* Broker timeout
+* Duplicate response
+* Partial fill
+* Stop-loss rejection
+* Database restart
+* Redis restart
+* Stale prices
+* Parent Bot crash
+* Unexpected existing broker position
+
+**Output:** fault-handling report.
+
+## Day 20: Paper-trading release
+
+* Deploy to static-IP VPS.
+* Run only in sandbox or paper mode.
+* Generate daily report.
+* Review every trade manually.
+* Disable real orders by default.
+
+**Output:** 20-day MVP—not a proven profitable system.
+
+---
+
+# 12. Cost estimate
+
+## Self-developed MVP
+
+| Item                                 |                             Estimated cost |
+| ------------------------------------ | -----------------------------------------: |
+| Broker sandbox                       |                                         ₹0 |
+| Live broker data/API                 | ₹0–₹500/month depending on broker and plan |
+| VPS with static IP                   |                          ₹600–₹1,500/month |
+| PostgreSQL and Redis on same VPS     |                                   Included |
+| Domain name, optional                |                           ₹800–₹1,500/year |
+| Telegram alerts                      |                                         ₹0 |
+| Error monitoring, basic tier         |                                         ₹0 |
+| Additional historical data, optional |                            ₹0–₹5,000/month |
+| Development labour                   |                                  Your time |
+| Trading capital                      |                                   Separate |
+
+For Zerodha, live WebSocket and historical candle access is currently listed at ₹500 per month. ([Kite Trade][3])
+
+A practical initial budget is:
+
+```text
+Paper-trading MVP:
+Approximately ₹1,000–₹3,000 for the first month
+
+Live personal system:
+Approximately ₹1,500–₹5,000 per month
+excluding brokerage, transaction charges and capital
+```
+
+If outsourced, a reliable version could cost roughly ₹2 lakh–₹6 lakh or more because broker integration, monitoring, failure recovery and trading safety require considerably more work than a normal CRUD application.
+
+---
+
+# 13. Regulatory and infrastructure requirements
+
+The current retail algo framework requires broker-controlled API access and includes provisions around static IP mapping, risk controls, order-rate thresholds, tagging and audit trails. NSE’s standards describe mandatory static-IP mapping and an initial threshold of no more than 10 orders per second before higher-speed registration requirements apply. 
+
+SEBI’s implementation glide path stated that the framework would apply to all stockbrokers from April 1, 2026. Broker-specific onboarding and implementation should therefore be confirmed with your chosen broker before live deployment. 
+
+Use:
+
+```text
+Ubuntu VPS
+Static public IP
+HTTPS
+Encrypted environment variables
+OAuth-based broker authentication
+Daily access-token refresh
+Restricted firewall
+Database backups
+Complete audit logs
+```
+
+For example, Kite’s access token expires at 6 AM the following day, so its session must be authenticated for the trading day. Do not store your broker password or automate 2FA using insecure scripts. ([Kite Trade][6])
+
+---
+
+# 14. What counts as success after 20 days
+
+Not:
+
+```text
+The bot earned 2% today.
+Therefore it is successful.
+```
+
+Success means:
+
+```text
+No duplicate order
+No unprotected position
+Every order is reconciled
+Every position has a confirmed stop
+Daily loss limit works
+Bot stops after the profit cap
+Disconnected data prevents new trades
+Backtest includes realistic costs
+All actions have audit logs
+Emergency exit works
+```
+
+After completing the 20-day MVP, run it in paper mode for at least **4–8 weeks** across different market conditions. Begin live testing with one share or the smallest practical quantity, then increase only after the live results match the tested behaviour.
+
+The correct first version is therefore:
+
+> **A rule-based, multi-module trading system with AI-assisted stock ranking—not an AI with unrestricted control over your money.**
+
+[1]: https://www.sebi.gov.in/media-and-notifications/press-releases/jul-2024/sebi-study-finds-that-7-out-of-10-individual-intraday-traders-in-equity-cash-segment-make-losses_84948.html?trk=public_post_comment-text&utm_source=chatgpt.com "SEBI | SEBI study finds that 7 out of 10 individual intraday traders in equity cash segment make losses"
+[2]: https://kite.trade/docs/connect/v3/websocket/?utm_source=chatgpt.com "WebSocket streaming - Kite Connect 3 / API documentation"
+[3]: https://kite.trade/?utm_source=chatgpt.com "Kite Connect APIs: Trading and investment HTTP APIs"
+[4]: https://upstox.com/developer/api-documentation/announcements/sandbox-mode-for-apis/?utm_source=chatgpt.com "Sandbox Mode for API Integration | Upstox Developer API"
+[5]: https://support.zerodha.com/category/trading-and-markets/general-kite/funds/articles/intraday-profits-from-yesterday?utm_source=chatgpt.com "Can yesterday's intraday profits be used for today's trade in ..."
+[6]: https://www.kite.trade/docs/connect/v3/user/?utm_source=chatgpt.com "User - Kite Connect 3 / API documentation"
