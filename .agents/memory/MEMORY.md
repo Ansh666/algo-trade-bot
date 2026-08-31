@@ -1,0 +1,1 @@
+- [PostgreSQL numeric responses](postgres-numeric-responses.md) — Drizzle numeric columns need explicit API-boundary normalization before strict generated schemas validate them.

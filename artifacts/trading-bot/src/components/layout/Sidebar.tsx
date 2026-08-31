@@ -30,7 +30,8 @@ export function Sidebar() {
   const { data: session } = useGetTodaySession();
 
   return (
-    <div className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border shadow-xl z-10 relative">
+    <>
+    <div className="hidden md:flex md:w-64 bg-sidebar text-sidebar-foreground flex-col h-full border-r border-sidebar-border shadow-xl z-10 relative">
       <div className="h-14 flex items-center px-4 border-b border-sidebar-border bg-sidebar-foreground/5">
         <ShieldAlert className="w-5 h-5 text-primary mr-2" />
         <span className="font-bold tracking-tight text-lg">ALGO<span className="text-primary opacity-80">TRADE</span></span>
@@ -72,5 +73,26 @@ export function Sidebar() {
         </div>
       </div>
     </div>
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 flex h-16 items-center gap-1 overflow-x-auto border-t border-sidebar-border bg-sidebar px-2 text-sidebar-foreground shadow-2xl">
+      {navItems.map((item) => {
+        const isActive = location === item.href;
+        return (
+          <Link key={item.href} href={item.href} className="min-w-[64px] flex-1">
+            <div
+              className={cn(
+                "flex h-12 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-medium",
+                isActive
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground/65",
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="max-w-[72px] truncate">{item.label}</span>
+            </div>
+          </Link>
+        );
+      })}
+    </nav>
+    </>
   );
 }

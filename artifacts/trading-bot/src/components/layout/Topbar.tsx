@@ -23,11 +23,11 @@ export function Topbar() {
   };
 
   return (
-    <header className="h-14 bg-background border-b flex items-center justify-between px-6 shadow-sm z-10 sticky top-0">
-      <div className="flex items-center gap-4">
-        <h1 className="font-semibold text-lg tracking-tight">Mission Control</h1>
+    <header className="min-h-14 bg-background border-b flex items-center justify-between gap-2 px-3 py-2 shadow-sm z-10 sticky top-0 md:px-6">
+      <div className="flex min-w-0 items-center gap-2 md:gap-4">
+        <h1 className="truncate text-base font-semibold tracking-tight md:text-lg">Mission Control</h1>
         {session?.mode === "paper" && (
-          <Badge variant="warning" className="animate-pulse">
+          <Badge variant="warning" className="shrink-0 animate-pulse px-1.5 text-[10px] md:px-2 md:text-xs">
             PAPER MODE
           </Badge>
         )}
@@ -38,9 +38,9 @@ export function Topbar() {
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-2 md:gap-4">
         {session && (
-          <Badge variant="custom" className={getSessionStatusColor(session.status)}>
+          <Badge variant="custom" className={`hidden sm:inline-flex ${getSessionStatusColor(session.status)}`}>
             {session.status.replace("_", " ")}
           </Badge>
         )}
@@ -48,16 +48,17 @@ export function Topbar() {
         <Button
           variant="destructive"
           size="sm"
-          className="font-bold tracking-wider"
+          className="px-2 font-bold tracking-wider md:px-3"
           onClick={handleStop}
           disabled={!session || session.status === "closed" || session.status === "idle" || stopSession.isPending}
         >
           {stopSession.isPending ? (
-             <Power className="w-4 h-4 mr-2 animate-spin" />
+             <Power className="mr-1 h-4 w-4 animate-spin sm:mr-2" />
           ) : (
-            <AlertOctagon className="w-4 h-4 mr-2" />
+             <AlertOctagon className="mr-1 h-4 w-4 sm:mr-2" />
           )}
-          EMERGENCY STOP
+          <span className="hidden sm:inline">EMERGENCY STOP</span>
+          <span className="sm:hidden">STOP</span>
         </Button>
       </div>
     </header>
