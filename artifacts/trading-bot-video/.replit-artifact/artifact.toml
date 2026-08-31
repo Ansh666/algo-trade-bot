@@ -1,0 +1,29 @@
+kind = "video"
+previewPath = "/trading-bot-video/"
+title = "AI Trading Bot — Mission Control"
+description = "An animated product film for a personal AI-powered intraday trading control center for India's NSE market."
+version = "1.0.0"
+id = "artifacts/trading-bot-video"
+router = "path"
+videoAspectRatio = "16:9"
+
+[[services]]
+name = "web"
+paths = [ "/trading-bot-video" ]
+localPort = 20914
+
+[services.development]
+run = "pnpm --filter @workspace/trading-bot-video run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trading-bot-video", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trading-bot-video/dist"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20914"
+BASE_PATH = "/trading-bot-video/"
