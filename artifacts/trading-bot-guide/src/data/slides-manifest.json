@@ -1,0 +1,98 @@
+[
+  {
+    "id": "7de73e04-dff3-44bc-bb00-b6abac57cc61",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide1.tsx",
+    "title": "AI Trading Bot — Mission Control",
+    "description": "A step-by-step guide to disciplined, paper-first intraday trading for India’s NSE market.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "e633d289-4dff-4d1a-ad68-0fb5be381e4b",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide2.tsx",
+    "title": "What this application does",
+    "description": "Overview of features",
+    "speakerNotes": ""
+  },
+  {
+    "id": "270d10c7-4389-4171-aa3e-0010072b22bb",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide3.tsx",
+    "title": "Start safely: understand Paper Mode",
+    "description": "Paper mode details",
+    "speakerNotes": ""
+  },
+  {
+    "id": "af0edc51-dc4a-4467-876a-54dd12cbf5cc",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide4.tsx",
+    "title": "Step 1 — Set your risk mandate",
+    "description": "Risk management",
+    "speakerNotes": ""
+  },
+  {
+    "id": "968c9927-4402-4fc4-8095-2cc02f2329eb",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide5.tsx",
+    "title": "Step 2 — Start the trading session",
+    "description": "Starting the session",
+    "speakerNotes": ""
+  },
+  {
+    "id": "0165db55-2767-4eb5-9430-8a4362b7cfd5",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide6.tsx",
+    "title": "Step 3 — Read Mission Control",
+    "description": "Reading the dashboard",
+    "speakerNotes": ""
+  },
+  {
+    "id": "18fbf70e-fdd1-4235-97e3-057da5e828d5",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide7.tsx",
+    "title": "Step 4 — Check the Stock Universe",
+    "description": "Watchlist",
+    "speakerNotes": ""
+  },
+  {
+    "id": "d043d83b-314b-4b10-a292-628f8045618b",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide8.tsx",
+    "title": "Step 5 — Validate every signal",
+    "description": "Validating signals",
+    "speakerNotes": ""
+  },
+  {
+    "id": "b11a9eb5-8e4b-45b0-9fbb-8d38f0beaa65",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide9.tsx",
+    "title": "Step 6 — Monitor positions and protection",
+    "description": "Positions and protection",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a9a3b740-410a-4fb4-bf4b-85e8a5ec9dbf",
+    "position": 10,
+    "filepath": "src/pages/slides/Slide10.tsx",
+    "title": "Step 7 — Review money and execution records",
+    "description": "Reviewing records",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a8dcfe18-eefd-4a1e-abeb-614b986ccb4b",
+    "position": 11,
+    "filepath": "src/pages/slides/Slide11.tsx",
+    "title": "Practical habits that can improve outcomes",
+    "description": "Habits",
+    "speakerNotes": ""
+  },
+  {
+    "id": "416960d7-2f34-4b53-bfa2-8b09335c05d7",
+    "position": 12,
+    "filepath": "src/pages/slides/Slide12.tsx",
+    "title": "Your repeatable daily workflow",
+    "description": "Workflow summary",
+    "speakerNotes": ""
+  }
+]

@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/trading-bot-guide/"
+title = "AI Trading Bot — Step-by-Step Guide"
+description = "A 12-slide introduction and practical walkthrough for using the AI Trading Bot Mission Control application safely in paper mode."
+version = "1.0.0"
+id = "artifacts/trading-bot-guide"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/trading-bot-guide/" ]
+localPort = 23167
+
+[services.development]
+run = "pnpm --filter @workspace/trading-bot-guide run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trading-bot-guide", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trading-bot-guide/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23167"
+BASE_PATH = "/trading-bot-guide/"
