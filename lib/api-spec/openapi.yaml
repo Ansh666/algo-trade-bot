@@ -3,20 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AI Trading Bot API - Intraday stock trading with risk management
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: session
+  - name: instruments
+  - name: signals
+  - name: positions
+  - name: trades
+  - name: orders
+  - name: wallet
+  - name: settings
+  - name: dashboard
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +32,947 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /sessions/today:
+    get:
+      operationId: getTodaySession
+      tags: [session]
+      summary: Get today's trading session
+      responses:
+        "200":
+          description: Today's session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradingSession"
+        "404":
+          description: No session today
+
+  /sessions/start:
+    post:
+      operationId: startSession
+      tags: [session]
+      summary: Start a new trading session
+      responses:
+        "201":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradingSession"
+
+  /sessions/stop:
+    post:
+      operationId: stopSession
+      tags: [session]
+      summary: Emergency stop — close all positions and disable new trades
+      responses:
+        "200":
+          description: Session stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradingSession"
+
+  /instruments:
+    get:
+      operationId: listInstruments
+      tags: [instruments]
+      summary: List all instruments in the tracked universe
+      responses:
+        "200":
+          description: List of instruments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Instrument"
+
+  /instruments/{id}:
+    get:
+      operationId: getInstrument
+      tags: [instruments]
+      summary: Get a single instrument with indicators
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Instrument detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstrumentDetail"
+        "404":
+          description: Not found
+
+  /signals:
+    get:
+      operationId: listSignals
+      tags: [signals]
+      summary: List trade signals
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, executed, expired]
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: List of signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Signal"
+
+  /signals/live:
+    get:
+      operationId: getLiveSignals
+      tags: [signals]
+      summary: Current live signals being evaluated
+      responses:
+        "200":
+          description: Live signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Signal"
+
+  /positions:
+    get:
+      operationId: listPositions
+      tags: [positions]
+      summary: List all active intraday positions
+      responses:
+        "200":
+          description: Active positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Position"
+
+  /positions/{id}:
+    get:
+      operationId: getPosition
+      tags: [positions]
+      summary: Get a single position
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Position detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "404":
+          description: Not found
+
+  /positions/{id}/close:
+    post:
+      operationId: forceClosePosition
+      tags: [positions]
+      summary: Force close a position
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Position closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "404":
+          description: Not found
+
+  /trades:
+    get:
+      operationId: listTrades
+      tags: [trades]
+      summary: Trade history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+            default: 50
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Trade history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+
+  /trades/today:
+    get:
+      operationId: listTodayTrades
+      tags: [trades]
+      summary: All trades completed today
+      responses:
+        "200":
+          description: Today's trades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+
+  /trades/{id}:
+    get:
+      operationId: getTrade
+      tags: [trades]
+      summary: Get a single trade
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Trade detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+        "404":
+          description: Not found
+
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: Order history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+            default: 50
+        - name: positionId
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Order history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+
+  /wallet:
+    get:
+      operationId: getWallet
+      tags: [wallet]
+      summary: Get wallet balance summary
+      responses:
+        "200":
+          description: Wallet summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletSummary"
+
+  /wallet/ledger:
+    get:
+      operationId: listWalletLedger
+      tags: [wallet]
+      summary: Get wallet ledger entries
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+            default: 50
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WalletLedgerEntry"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get current trading mandate and risk settings
+      responses:
+        "200":
+          description: Trading settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradingSettings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update trading mandate and risk settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradingSettingsUpdate"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradingSettings"
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Full dashboard summary
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/performance:
+    get:
+      operationId: getPerformance
+      tags: [dashboard]
+      summary: Performance statistics
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: number
+            default: 30
+      responses:
+        "200":
+          description: Performance stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PerformanceStats"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    TradingSession:
+      type: object
+      required:
+        - id
+        - date
+        - status
+        - mode
+        - realizedPnl
+        - unrealizedPnl
+        - tradeCount
+        - winCount
+        - lossCount
+        - dailyLossLimit
+        - dailyProfitCap
+        - allocatedCapital
+        - startedAt
+      properties:
+        id:
+          type: number
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [idle, starting, scanning, trading, profit_locked, loss_locked, closing, closed, failed]
+        mode:
+          type: string
+          enum: [paper, live]
+        realizedPnl:
+          type: number
+        unrealizedPnl:
+          type: number
+        tradeCount:
+          type: number
+        winCount:
+          type: number
+        lossCount:
+          type: number
+        dailyLossLimit:
+          type: number
+        dailyProfitCap:
+          type: number
+        allocatedCapital:
+          type: number
+        startedAt:
+          type: string
+          format: date-time
+        stoppedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    Instrument:
+      type: object
+      required:
+        - id
+        - symbol
+        - name
+        - exchange
+        - isActive
+        - currentPrice
+        - change
+        - changePercent
+        - volume
+        - relativeVolume
+      properties:
+        id:
+          type: number
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        isActive:
+          type: boolean
+        currentPrice:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        volume:
+          type: number
+        relativeVolume:
+          type: number
+        vwap:
+          type: ["number", "null"]
+        ema20:
+          type: ["number", "null"]
+        ema50:
+          type: ["number", "null"]
+        atr:
+          type: ["number", "null"]
+        score:
+          type: ["number", "null"]
+
+    InstrumentDetail:
+      type: object
+      required:
+        - id
+        - symbol
+        - name
+        - exchange
+        - isActive
+        - currentPrice
+        - change
+        - changePercent
+        - volume
+        - relativeVolume
+      properties:
+        id:
+          type: number
+        symbol:
+          type: string
+        name:
+          type: string
+        exchange:
+          type: string
+        isActive:
+          type: boolean
+        currentPrice:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        volume:
+          type: number
+        relativeVolume:
+          type: number
+        vwap:
+          type: ["number", "null"]
+        ema20:
+          type: ["number", "null"]
+        ema50:
+          type: ["number", "null"]
+        atr:
+          type: ["number", "null"]
+        score:
+          type: ["number", "null"]
+        supportZoneLow:
+          type: ["number", "null"]
+        supportZoneHigh:
+          type: ["number", "null"]
+        resistanceZoneLow:
+          type: ["number", "null"]
+        resistanceZoneHigh:
+          type: ["number", "null"]
+        prevDayHigh:
+          type: ["number", "null"]
+        prevDayLow:
+          type: ["number", "null"]
+        openingRangeHigh:
+          type: ["number", "null"]
+        openingRangeLow:
+          type: ["number", "null"]
+
+    Signal:
+      type: object
+      required:
+        - id
+        - instrumentId
+        - symbol
+        - strategy
+        - score
+        - entryPrice
+        - stopLoss
+        - target
+        - riskAmount
+        - rewardAmount
+        - riskReward
+        - status
+        - createdAt
+      properties:
+        id:
+          type: number
+        instrumentId:
+          type: number
+        symbol:
+          type: string
+        strategy:
+          type: string
+          enum: [volume_breakout, support_pullback]
+        score:
+          type: number
+        entryPrice:
+          type: number
+        stopLoss:
+          type: number
+        target:
+          type: number
+        riskAmount:
+          type: number
+        rewardAmount:
+          type: number
+        riskReward:
+          type: number
+        status:
+          type: string
+          enum: [pending, approved, rejected, executed, expired]
+        rejectionReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    Position:
+      type: object
+      required:
+        - id
+        - instrumentId
+        - symbol
+        - entryPrice
+        - currentPrice
+        - stopLoss
+        - target
+        - quantity
+        - positionValue
+        - unrealizedPnl
+        - unrealizedPnlPercent
+        - plannedRisk
+        - plannedReward
+        - status
+        - stopState
+        - entryAt
+      properties:
+        id:
+          type: number
+        instrumentId:
+          type: number
+        symbol:
+          type: string
+        entryPrice:
+          type: number
+        currentPrice:
+          type: number
+        stopLoss:
+          type: number
+        target:
+          type: number
+        quantity:
+          type: number
+        positionValue:
+          type: number
+        unrealizedPnl:
+          type: number
+        unrealizedPnlPercent:
+          type: number
+        plannedRisk:
+          type: number
+        plannedReward:
+          type: number
+        status:
+          type: string
+          enum: [entry_submitted, entry_filled, stop_submitted, protected, trailing_active, exit_submitted, closed, failed]
+        stopState:
+          type: string
+          enum: [initial_risk, one_r_reached, break_even, trailing_active, target_reached]
+        entryAt:
+          type: string
+          format: date-time
+        exitAt:
+          type: ["string", "null"]
+          format: date-time
+
+    Trade:
+      type: object
+      required:
+        - id
+        - instrumentId
+        - symbol
+        - entryPrice
+        - exitPrice
+        - quantity
+        - positionValue
+        - pnl
+        - pnlPercent
+        - exitReason
+        - durationSeconds
+        - entryAt
+        - exitAt
+      properties:
+        id:
+          type: number
+        instrumentId:
+          type: number
+        symbol:
+          type: string
+        entryPrice:
+          type: number
+        exitPrice:
+          type: number
+        quantity:
+          type: number
+        positionValue:
+          type: number
+        pnl:
+          type: number
+        pnlPercent:
+          type: number
+        exitReason:
+          type: string
+          enum: [target, stop_loss, forced_close, end_of_day, daily_limit]
+        durationSeconds:
+          type: number
+        entryAt:
+          type: string
+          format: date-time
+        exitAt:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      required:
+        - id
+        - instrumentId
+        - symbol
+        - orderType
+        - side
+        - quantity
+        - price
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: number
+        instrumentId:
+          type: number
+        symbol:
+          type: string
+        positionId:
+          type: ["number", "null"]
+        orderType:
+          type: string
+          enum: [market, limit, sl, sl_market]
+        side:
+          type: string
+          enum: [buy, sell]
+        quantity:
+          type: number
+        price:
+          type: number
+        triggerPrice:
+          type: ["number", "null"]
+        filledPrice:
+          type: ["number", "null"]
+        filledQuantity:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [pending, open, partially_filled, complete, rejected, cancelled]
+        brokerOrderId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WalletSummary:
+      type: object
+      required:
+        - allocatedBalance
+        - availableBalance
+        - reservedBalance
+        - unrealizedPnl
+        - realizedUnsettledPnl
+        - settledBalance
+        - withdrawableBalance
+        - dailyPnl
+        - dailyPnlPercent
+      properties:
+        allocatedBalance:
+          type: number
+        availableBalance:
+          type: number
+        reservedBalance:
+          type: number
+        unrealizedPnl:
+          type: number
+        realizedUnsettledPnl:
+          type: number
+        settledBalance:
+          type: number
+        withdrawableBalance:
+          type: number
+        dailyPnl:
+          type: number
+        dailyPnlPercent:
+          type: number
+
+    WalletLedgerEntry:
+      type: object
+      required:
+        - id
+        - type
+        - amount
+        - description
+        - runningBalance
+        - createdAt
+      properties:
+        id:
+          type: number
+        type:
+          type: string
+          enum: [allocation_created, position_reserved, position_released, profit_recorded, loss_recorded, profit_settled, withdrawal_recorded]
+        amount:
+          type: number
+        description:
+          type: string
+        runningBalance:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    TradingSettings:
+      type: object
+      required:
+        - id
+        - allocatedCapital
+        - maxPositionValue
+        - maxOpenPositions
+        - maxTradesPerDay
+        - riskPerTrade
+        - dailyMaxLoss
+        - dailyProfitCap
+        - minRewardRiskRatio
+        - autoTradingEnabled
+        - tradingMode
+        - updatedAt
+      properties:
+        id:
+          type: number
+        allocatedCapital:
+          type: number
+        maxPositionValue:
+          type: number
+        maxOpenPositions:
+          type: number
+        maxTradesPerDay:
+          type: number
+        riskPerTrade:
+          type: number
+        dailyMaxLoss:
+          type: number
+        dailyProfitCap:
+          type: number
+        minRewardRiskRatio:
+          type: number
+        autoTradingEnabled:
+          type: boolean
+        tradingMode:
+          type: string
+          enum: [paper, live]
+        updatedAt:
+          type: string
+          format: date-time
+
+    TradingSettingsUpdate:
+      type: object
+      properties:
+        allocatedCapital:
+          type: number
+          minimum: 0
+        maxPositionValue:
+          type: number
+          minimum: 0
+        maxOpenPositions:
+          type: number
+          minimum: 1
+          maximum: 10
+        maxTradesPerDay:
+          type: number
+          minimum: 1
+          maximum: 20
+        riskPerTrade:
+          type: number
+          minimum: 0
+        dailyMaxLoss:
+          type: number
+          minimum: 0
+        dailyProfitCap:
+          type: number
+          minimum: 0
+        minRewardRiskRatio:
+          type: number
+          minimum: 1
+        autoTradingEnabled:
+          type: boolean
+        tradingMode:
+          type: string
+          enum: [paper, live]
+
+    DashboardSummary:
+      type: object
+      required:
+        - session
+        - wallet
+        - activePositionsCount
+        - pendingSignalsCount
+        - todayTradeCount
+        - todayWinCount
+        - todayLossCount
+        - topSignals
+        - recentTrades
+      properties:
+        session:
+          $ref: "#/components/schemas/TradingSession"
+        wallet:
+          $ref: "#/components/schemas/WalletSummary"
+        activePositionsCount:
+          type: number
+        pendingSignalsCount:
+          type: number
+        todayTradeCount:
+          type: number
+        todayWinCount:
+          type: number
+        todayLossCount:
+          type: number
+        topSignals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Signal"
+        recentTrades:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trade"
+
+    PerformanceStats:
+      type: object
+      required:
+        - totalTrades
+        - winCount
+        - lossCount
+        - winRate
+        - avgWin
+        - avgLoss
+        - profitFactor
+        - totalPnl
+        - bestTrade
+        - worstTrade
+        - maxDrawdown
+        - avgDurationSeconds
+        - tradingDays
+      properties:
+        totalTrades:
+          type: number
+        winCount:
+          type: number
+        lossCount:
+          type: number
+        winRate:
+          type: number
+        avgWin:
+          type: number
+        avgLoss:
+          type: number
+        profitFactor:
+          type: number
+        totalPnl:
+          type: number
+        bestTrade:
+          type: number
+        worstTrade:
+          type: number
+        maxDrawdown:
+          type: number
+        avgDurationSeconds:
+          type: number
+        tradingDays:
+          type: number
