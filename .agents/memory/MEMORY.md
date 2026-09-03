@@ -1,1 +1,2 @@
 - [PostgreSQL numeric responses](postgres-numeric-responses.md) — Drizzle numeric columns need explicit API-boundary normalization before strict generated schemas validate them.
+- [GitHub connector push limitation](github-connector-push.md) — the connected GitHub API does not provide native git transport; bulk Git Data uploads can be blocked by the connector gateway.
